@@ -1,8 +1,9 @@
 package com.codect.authService.rest;
 
-public class UserPass {
+public class LoginReq {
 	private String username;
 	private String password;
+	private int expirationDuration=3600;
 	
 	public String getUsername() {
 		return username;
@@ -16,5 +17,10 @@ public class UserPass {
 	public void setPassword(String password) {
 		this.password = password;
 	}
-	
+	public int getExpirationDuration() {
+		return expirationDuration;
+	}
+	public void setExpirationDuration(int expirationDuration) {
+		this.expirationDuration = expirationDuration;
+	}
 }

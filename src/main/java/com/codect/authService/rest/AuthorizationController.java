@@ -1,62 +1,129 @@
 package com.codect.authService.rest;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.codect.authService.entities.Organization;
+import com.codect.authService.db.AclClass;
+import com.codect.authService.db.UserGroup;
+import com.codect.authService.db.UserGroupRepository;
+import com.codect.authService.rest.modals.AclObjectReq;
+import com.codect.authService.rest.modals.GrantReq;
+import com.codect.authService.rest.modals.GroupIdReq;
+import com.codect.authService.rest.modals.UserGroupReq;
+import com.codect.authService.services.AuthorizationService;
+import com.codect.authService.services.JwtService;
 
 @RestController
+@RequestMapping("/api/authorization")
 public class AuthorizationController {
 
 	@Autowired
-	private SecurityService ss;
-	
-	@Autowired
-	AuthenticationManager authenticationManager;
-	
-	@Autowired
 	JwtService jwtService;
-	
-	@GetMapping("/home1")
-	@PreAuthorize("hasRole('USER')")
-	public String greeting(@RequestParam(value = "name", defaultValue = "World") String name) {
-		ss.grant("aaaa",new Organization(123,"mordy"),"ADMINISTRATION");
-		return "all good";
+	@Autowired
+	private UserGroupRepository groupRepository;
+	@Autowired
+	private AuthorizationService authorizationService;
+
+// ----------------------------- between our services -----------------------------
+	@GetMapping("/entityTypes")
+	public Map<String,Object> getAllSecuredEntities(){
+		HashMap<String, Object> ret = new HashMap<String, Object>();
+		Map<String, String> entities = authorizationService.getEntityTypes();
+		ret.put("entities",entities);
+		return ret;
+	}
+
+	@PostMapping("/createObject")
+	public void securedObjectCreated(@RequestBody AclObjectReq aclObj) {
+		authorizationService.createSecureObject(aclObj);
+	}
+
+	@GetMapping(value="/group/user")
+	public List<String> getAllUsersInGroup(GroupIdReq groupId) {
+		UserGroup userGroup = new UserGroup();
+		userGroup.setId(groupId.getGroupId());
+		return authorizationService.getAllUsersInGroup(userGroup);
+	}
+
+	@PostMapping(value="/allow")
+	public boolean isAllow(GrantReq grantReq) {
+		AclClass clas = new AclClass();
+		clas.setClassname(grantReq.getClassname());
+		return authorizationService.isAllow(grantReq.getUsername(),clas,grantReq.getObjectId(),grantReq.getPerm());
+	}
+
+// ----------------------------- external for applications ------------------------ 
+
+	@PostMapping("/group")
+	public void createGroup(Map<String,String> group) {
+		groupRepository.save(new UserGroup(group.get("name")));
+		String username=authorizationService.getUserName();
+		// insert admin perm for this object
+	}
+
+	@PostMapping("/group/user")
+	public void addUserToGroup(UserGroupReq userGroup) {
+		Optional<UserGroup> group = groupRepository.findById(userGroup.getGroupId());
+		if (group.isPresent()) {
+			authorizationService.addUserToGroup(group.get(),userGroup.getUsername());
+		}
+		else
+			throw new IllegalArgumentException("No groupId:"+userGroup.getGroupId());
+	}
+
+	@RequestMapping(value="/group/user",method=RequestMethod.DELETE)
+	public void removeUserFromGroup(UserGroupReq userGroup) {
+		Optional<UserGroup> group = groupRepository.findById(userGroup.getGroupId());
+		if (group.isPresent()) {
+			authorizationService.removeUserFromGroup(group.get(),userGroup.getUsername());
+		}
+		else
+			throw new IllegalArgumentException("No groupId:"+userGroup.getGroupId());
+	}
+
+	@RequestMapping(value="/group",method=RequestMethod.DELETE)
+	public void deleteGroup(GroupIdReq groupId) {
+		UserGroup ug = new UserGroup();
+		ug.setId(groupId.getGroupId());
+		authorizationService.deleteGroup(ug);
 	}
 	
-	@PostMapping("/home2")
-	public String home2(@RequestBody Organization d) {
-		return ss.dothat2(d);
+	@GetMapping("/group")
+	public void listGroups() {
+		authorizationService.listGroups();
+	}
+
+//	@RequestMapping(value="/group/user",method=RequestMethod.DELETE)
+//	public void listUsersInGroup(UserGroupReq userGroup) {
+//		Optional<UserGroup> group = groupRepository.findById(userGroup.getGroupId());
+//		if (group.isPresent()) {
+//			authorizationService.removeUserFromGroup(group.get(),userGroup.getUsername());
+//		}
+//		else
+//			throw new IllegalArgumentException("No groupId:"+userGroup.getGroupId());
+//	}
+	
+	@PostMapping(value="/grant")
+	public void grant(GrantReq grantReq) {
+		AclClass clas = new AclClass();
+		clas.setClassname(grantReq.getClassname());
+		authorizationService.grant(grantReq.getUsername(),clas,grantReq.getObjectId(),grantReq.getPerm());
 	}
 	
-	@PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody UserPass login) {
-        try {
-            Authentication authenticate = authenticationManager.authenticate(
-            		new UsernamePasswordAuthenticationToken(login.getUsername(), login.getPassword()));
-            User user = (User) authenticate.getPrincipal();
-            return ResponseEntity.ok().header(HttpHeaders.AUTHORIZATION,jwtService.generateToken(user)).body("jwt in header");
-        } catch (BadCredentialsException ex) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-    }
+//	getAllowFor. input user + list of objects/classes.
 	
-	@GetMapping("/home3")
-	public String testJWTAuth(@RequestBody Organization d) {
-		ss.home3(d);
-		return "all good";
-	}
+//	can return all permissions compressed in the JWT for other services to use.
+//	       suggestion for compression: list of strings in the format: ${class_id}_${object_id}_${mask}
+//	list users with rights to object+permission.
+	
 }

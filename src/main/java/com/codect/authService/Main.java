@@ -7,7 +7,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
-import com.codect.authService.jpa.CustomerRepository;
+import com.codect.authService.db.AclClass;
+import com.codect.authService.db.AclClassesRepository;
 
 @SpringBootApplication
 public class Main{
@@ -19,8 +20,15 @@ public class Main{
 	}
 
 	@Bean
-	public CommandLineRunner initDb(CustomerRepository repository) {
+	public CommandLineRunner initDb(AclClassesRepository classes) {
 		return (args) -> {
+			if (classes.findAll().size()>0)
+				return;
+			classes.save(new AclClass((short) 0,"Device"));
+			classes.save(new AclClass((short) 1,"Image"));
+			classes.save(new AclClass((short) 2,"User"));
+			classes.save(new AclClass((short) 3,"UserGroup"));
+			
 			
 		};
 	}
